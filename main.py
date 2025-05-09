@@ -6,8 +6,12 @@ from aiogram.client.default import DefaultBotProperties
 from config import BOT_TOKEN
 from handlers import start, help  # импорты из твоих модулей
 
+
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
+from handlers import start
+dp.include_router(start.router)
+
 
 # Регистрируем хендлеры
 dp.include_router(start.router)

@@ -11,5 +11,5 @@ class AccessMiddleware(BaseMiddleware):
         data: Dict[str, Any]
     ) -> Any:
         user_id = event.from_user.id
-        add_user(user_id)  # регистрируем, если нет
+        add_user(user_id)  # Регистрируем пользователя, если его нет в базе
         return await handler(event, data)

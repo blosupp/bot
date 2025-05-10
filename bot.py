@@ -7,6 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from openai import OpenAI
 from dotenv import load_dotenv
 
+
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")

@@ -3,34 +3,27 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
 router = Router()
-user_settings = {}  # user_id: {"remember": True, "history_limit": 10}
 
-def get_settings_kb(user_id):
-    remember = user_settings.get(user_id, {}).get("remember", True)
-    limit = user_settings.get(user_id, {}).get("history_limit", 10)
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🧠 Запоминать: {'✅' if remember else '❌'}", callback_data="toggle_remember")],
-        [InlineKeyboardButton(text=f"📚 История: {limit}", callback_data="set_limit")]
+@router.message(Command("settings"))
+async def settings_menu(message: types.Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🧠 GPT: Включить", callback_data="toggle_gpt")],
+        [InlineKeyboardButton(text="📂 Категория: Новости", callback_data="set_category_news")],
+        [InlineKeyboardButton(text="📅 Отложить пост", callback_data="schedule_post")],
     ])
+    await message.answer("⚙️ Настройки бота:", reply_markup=keyboard)
 
-@router.message(Command("настройки"))
-async def show_settings(message: types.Message):
-    kb = get_settings_kb(message.from_user.id)
-    await message.answer("⚙️ Настройки бота:", reply_markup=kb)
+@router.callback_query(F.data.startswith("toggle_gpt"))
+async def toggle_gpt(callback: types.CallbackQuery):
+    await callback.answer("🧠 GPT включён (заглушка)")
+    await callback.message.edit_text("✅ GPT включён", reply_markup=None)
 
-@router.callback_query(F.data == "toggle_remember")
-async def toggle_remember(cb: types.CallbackQuery):
-    uid = cb.from_user.id
-    current = user_settings.get(uid, {}).get("remember", True)
-    user_settings.setdefault(uid, {})["remember"] = not current
-    await cb.message.edit_reply_markup(reply_markup=get_settings_kb(uid))
-    await cb.answer("🔁 Обновлено")
+@router.callback_query(F.data.startswith("set_category_news"))
+async def set_category(callback: types.CallbackQuery):
+    await callback.answer("📂 Категория: Новости выбрана")
+    await callback.message.edit_text("✅ Категория выбрана: Новости", reply_markup=None)
 
-@router.callback_query(F.data == "set_limit")
-async def set_limit(cb: types.CallbackQuery):
-    uid = cb.from_user.id
-    current = user_settings.get(uid, {}).get("history_limit", 10)
-    new_limit = 5 if current == 20 else current + 5
-    user_settings.setdefault(uid, {})["history_limit"] = new_limit
-    await cb.message.edit_reply_markup(reply_markup=get_settings_kb(uid))
-    await cb.answer(f"📚 Лимит: {new_limit}")
+@router.callback_query(F.data.startswith("schedule_post"))
+async def schedule_post(callback: types.CallbackQuery):
+    await callback.answer("🕐 В будущем тут будет планировщик публикации")
+    await callback.message.edit_text("🔧 Планирование пока в разработке", reply_markup=None)

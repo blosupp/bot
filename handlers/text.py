@@ -1,14 +1,16 @@
 from aiogram import Router, types
-from config import ADMIN_ID, CHANNEL_ID
+from config import CHANNEL_ID
 from services.openai_service import ask_gpt
 from db import save_message, load_history
-from handlers.settings import user_settings
+from access import get_user_settings, get_user_channels, is_admin
 
 router = Router()
 
 @router.message()
 async def handle_text(message: types.Message):
-    if str(message.from_user.id) != str(ADMIN_ID):
+    uid = message.from_user.id
+    print(f"[TEXT] Сообщение от {uid}: {message.text}")
+    if not is_admin(uid):
         await message.answer("⛔️ Нет доступа.")
         return
 
@@ -20,9 +22,10 @@ async def handle_text(message: types.Message):
     await message.answer("✍️ Генерирую пост...")
 
     try:
-        uid = message.from_user.id
-        remember = user_settings.get(uid, {}).get("remember", True)
-        limit = user_settings.get(uid, {}).get("history_limit", 10)
+        user_data = get_user_settings(uid)
+        remember = user_data["remember"]
+        limit = user_data["history_limit"]
+
         history = load_history(uid, limit)
         history.append({"role": "user", "content": prompt})
 
@@ -41,13 +44,19 @@ async def handle_text(message: types.Message):
             save_message(uid, "user", prompt)
             save_message(uid, "assistant", gpt_reply)
 
-        await message.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=gpt_reply,
-            parse_mode="HTML"
-        )
+        channels = get_user_channels(uid)
+        if not channels:
+            await message.answer("❗️ У вас не добавлен ни один канал.")
+            return
 
-        await message.answer("✅ Пост опубликован в канал.")
+        for ch_id in channels:
+            await message.bot.send_message(
+                chat_id=ch_id,
+                text=gpt_reply,
+                parse_mode="HTML"
+            )
+
+        await message.answer("✅ Пост опубликован в ваши каналы.")
 
     except Exception as e:
         await message.answer(f"❌ Ошибка при генерации поста: {e}")

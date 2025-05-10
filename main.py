@@ -8,7 +8,7 @@ from db import init_db
 from access import init_access_db
 from middleware.access_control import AccessMiddleware
 
-from handlers import start, help, photo, post, settings, admin_panel
+from handlers import start, help, photo, post, settings, admin_panel, text
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -21,6 +21,8 @@ dp.include_router(photo.router)
 dp.include_router(post.router)
 dp.include_router(settings.router)
 dp.include_router(admin_panel.router)
+dp.include_router(text.router)
+
 
 async def main():
     init_db()

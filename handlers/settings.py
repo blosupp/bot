@@ -2,6 +2,7 @@ from aiogram import Router, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 
+
 router = Router()
 
 @router.message(Command("settings"))

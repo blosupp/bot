@@ -1,17 +1,13 @@
-# handlers/admin_panel.py
-
-from aiogram import Router, F, types
+from aiogram import Router, types
 from aiogram.filters import Command
 from access import is_admin, add_user, remove_user, add_channel, remove_channel, get_user_channels
 
 router = Router()
+pending_actions = {}
 
-pending_actions = {}  # user_id: (action, role)
-
-# Главное меню
 @router.message(Command("доступ"))
 async def access_menu(message: types.Message):
-    if not is_admin(str(message.from_user.id)):
+    if not is_admin(message.from_user.id):
         await message.answer("⛔️ Только для админов.")
         return
 
@@ -30,12 +26,9 @@ async def access_menu(message: types.Message):
     ])
     await message.answer("⚙️ Панель управления:", reply_markup=kb)
 
-# Обработка кнопок
-@router.callback_query(F.data.in_(
-    ["add_user", "remove_user", "add_channel", "remove_channel", "list_channels"]
-))
+@router.callback_query()
 async def handle_access_buttons(callback: types.CallbackQuery):
-    uid = str(callback.from_user.id)
+    uid = callback.from_user.id
     action = callback.data
 
     if not is_admin(uid):
@@ -59,29 +52,28 @@ async def handle_access_buttons(callback: types.CallbackQuery):
     await callback.message.answer(prompt_map[action])
     await callback.answer()
 
-# Обработка следующего сообщения
 @router.message()
 async def handle_pending_input(message: types.Message):
-    uid = str(message.from_user.id)
+    uid = message.from_user.id
 
     if uid not in pending_actions:
-        return  # обычное сообщение
+        return
 
     action = pending_actions.pop(uid)
     target = message.text.strip()
 
     try:
         if action == "add_user":
-            add_user(user_id=target, role="user", added_by=uid)
+            add_user(int(target), role="user")
             await message.answer("✅ Пользователь добавлен.")
         elif action == "remove_user":
-            remove_user(user_id=target)
+            remove_user(int(target))
             await message.answer("✅ Пользователь удалён.")
         elif action == "add_channel":
-            add_channel(channel_id=target, owner_id=uid)
+            add_channel(uid, target)
             await message.answer("✅ Канал добавлен.")
         elif action == "remove_channel":
-            remove_channel(channel_id=target, owner_id=uid)
+            remove_channel(uid, target)
             await message.answer("✅ Канал удалён.")
         else:
             await message.answer("⚠️ Неизвестное действие.")

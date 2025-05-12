@@ -1,3 +1,4 @@
+
 from aiogram import Router, types, F
 from services.openai_service import ask_gpt
 from db import save_message, load_history

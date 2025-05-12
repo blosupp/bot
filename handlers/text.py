@@ -1,62 +1,121 @@
 from aiogram import Router, types
-from config import CHANNEL_ID
 from services.openai_service import ask_gpt
 from db import save_message, load_history
 from access import get_user_settings, get_user_channels, is_admin
 
 router = Router()
 
+user_contexts = {}  # user_id: {"mode": str, "history": list, "last_post": str}
+
+CONFIRM_PHRASES = {"да", "публикуй", "отправляй", "ок"}
+CANCEL_PHRASES = {"отмена", "не надо", "отменить"}
+EDIT_PHRASES = {"измени", "перепиши", "доработай"}
+
+
+
+def detect_intent(text: str) -> str:
+    lowered = text.lower()
+    if any(kw in lowered for kw in ["пост", "напиши", "опубликуй", "в канал", "опубликовать"]):
+        return "post"
+    return "dialog"
+
 @router.message()
-async def handle_text(message: types.Message):
+async def handle_ai(message: types.Message):
     uid = message.from_user.id
-    print(f"[TEXT] Сообщение от {uid}: {message.text}")
+    text = message.text.strip()
+
     if not is_admin(uid):
-        await message.answer("⛔️ Нет доступа.")
+        await message.answer("⛔️ У вас нет доступа.")
         return
 
-    prompt = message.text.strip()
-    if not prompt:
-        await message.answer("⚠️ Пустое сообщение.")
-        return
+    # Инициализируем контекст, если нет
+    if uid not in user_contexts:
+        user_contexts[uid] = {"mode": None, "history": [], "last_post": None}
 
-    await message.answer("✍️ Генерирую пост...")
+    ctx = user_contexts[uid]
 
-    try:
-        user_data = get_user_settings(uid)
-        remember = user_data["remember"]
-        limit = user_data["history_limit"]
+    # === ОБРАБОТКА ПОДТВЕРЖДЕНИЯ ===
+    if ctx["mode"] == "confirm_post":
+        if text.lower() in CONFIRM_PHRASES:
+            channels = get_user_channels(uid)
+            if not channels:
+                await message.answer("⚠️ У вас не добавлен ни один канал.")
+                ctx["mode"] = None
+                return
 
-        history = load_history(uid, limit)
-        history.append({"role": "user", "content": prompt})
+            for ch in channels:
+                await message.bot.send_message(
+                    chat_id=ch,
+                    text=ctx["last_post"],
+                    parse_mode="HTML"
+                )
 
-        system_prompt = (
-            "Ты — Telegram-копирайтер. Пиши посты по запросу пользователя. "
-            "Не добавляй приветствий, хэштегов и эмодзи. Максимум — 1024 символа. Пиши чётко и по делу."
-        )
-
-        gpt_reply = ask_gpt(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            memory=history
-        )
-
-        if remember:
-            save_message(uid, "user", prompt)
-            save_message(uid, "assistant", gpt_reply)
-
-        channels = get_user_channels(uid)
-        if not channels:
-            await message.answer("❗️ У вас не добавлен ни один канал.")
+            await message.answer("✅ Пост опубликован.")
+            ctx["mode"] = None
             return
 
-        for ch_id in channels:
-            await message.bot.send_message(
-                chat_id=ch_id,
-                text=gpt_reply,
-                parse_mode="HTML"
-            )
+        elif text.lower() in CANCEL_PHRASES:
+            ctx["mode"] = None
+            await message.answer("❌ Публикация отменена.")
+            return
 
-        await message.answer("✅ Пост опубликован в ваши каналы.")
+        elif text.lower() in EDIT_PHRASES:
+            ctx["mode"] = "edit_post"
+            await message.answer("✏️ Введите новый вариант поста:")
+            return
+
+        else:
+            await message.answer("🤖 Подтвердите: да / нет / изменить")
+            return
+
+    # === ОБРАБОТКА РУЧНОГО РЕДАКТИРОВАНИЯ ===
+    if ctx["mode"] == "edit_post":
+        new_post = text
+        ctx["last_post"] = new_post
+        ctx["mode"] = "confirm_post"
+        await message.answer(f"📝 Новый пост:\n\n{new_post}\n\nПубликуем?")
+        return
+
+    # === ОПРЕДЕЛЕНИЕ РЕЖИМА ===
+    intent = detect_intent(text)
+    ctx["mode"] = intent
+
+    # === ЗАГРУЗКА НАСТРОЕК ===
+    user_data = get_user_settings(uid)
+    remember = user_data["remember"]
+    limit = user_data["history_limit"]
+
+    if not ctx["history"]:
+        ctx["history"] = load_history(uid, limit)
+
+    ctx["history"].append({"role": "user", "content": text})
+
+    # === PROMPT ===
+    system_prompt = (
+        "Ты — дружелюбный AI-ассистент в Telegram. Общайся с пользователем, веди диалог. "
+        "Если он просит создать пост, сгенерируй краткий и чёткий текст без приветствий, эмодзи и хэштегов. "
+        "Если вопрос личный — отвечай естественно."
+    )
+
+    try:
+        reply = ask_gpt(prompt=text, system_prompt=system_prompt, memory=ctx["history"])
+
+        if remember:
+            save_message(uid, "user", text)
+            save_message(uid, "assistant", reply)
+
+        # === ДИАЛОГ ===
+        if intent == "dialog":
+            await message.answer(reply)
+            ctx["history"].append({"role": "assistant", "content": reply})
+            return
+
+        # === ПОСТ ===
+        if intent == "post":
+            ctx["last_post"] = reply
+            ctx["mode"] = "confirm_post"
+            await message.answer(f"📋 Вот черновик поста:\n\n{reply}\n\nПубликуем? (да / нет / изменить)")
+            return
 
     except Exception as e:
-        await message.answer(f"❌ Ошибка при генерации поста: {e}")
+        await message.answer(f"❌ Ошибка: {e}")

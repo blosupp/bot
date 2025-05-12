@@ -9,6 +9,8 @@ from access import init_access_db
 from middleware.access_control import AccessMiddleware
 
 from handlers import start, help, photo, post, settings, admin_panel, text
+from access import add_user
+
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -17,8 +19,8 @@ dp.message.middleware(AccessMiddleware())
 
 dp.include_router(start.router)
 dp.include_router(help.router)
+# dp.include_router(post.router)
 dp.include_router(photo.router)
-dp.include_router(post.router)
 dp.include_router(settings.router)
 dp.include_router(admin_panel.router)
 dp.include_router(text.router)
